@@ -1,0 +1,32 @@
+name: Presence Deploy
+
+on:
+  push:
+    branches: 
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build presence 
+      run: |
+       docker build -t docker.pkg.github.com/sigl-arla/checkin/checkin:v1 .
+       docker login docker.pkg.github.com -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_TOKEN }}
+       docker push docker.pkg.github.com/sigl-arla/checkin/checkin:v1
+    - name: Deploy
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        password: ${{ secrets.SSH_PASSWORD }}
+        script: |
+          docker login docker.pkg.github.com -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_TOKEN }}
+          docker stop checkin-v1 || true
+          docker rm checkin-v1 || true
+          docker pull docker.pkg.github.com/sigl-arla/checkin/checkin:v1
+          # Groupe SIGL: use the following line instead
+          # docker run -d -p 80:80 --name checkin-v1 docker.pkg.github.com/sigl-arla/checkin/checkin:v1          
+          # and comment the next one
+          docker run -d --network="mobynet" --label traefik.enable=true --label traefik.docker.network=mobynet --label traefik.frontend.rule=Host:presence.arla-sigl.fr --label traefik.frontend.port=3000 --name checkin-v1 docker.pkg.github.com/sigl-arla/checkin/checkin:v1 
